@@ -1,70 +1,82 @@
-# Getting Started with Create React App
+# Backend Appvideos
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+-  Backend: [backend-appvideos](https://github.com/felippedesouza/backend-appvideos)
+-  Frontend: [frontend-appvideos](https://github.com/felippedesouza/frontend-appvideos)
+-  Backend que implementa o consumer no kafka: [backend-kafka](https://github.com/felippedesouza/backend-kafka)
 
-## Available Scripts
+## Clonando os diretórios
 
-In the project directory, you can run:
+Rode o script
 
-### `npm start`
+```bash
+mkdir appvideos \
+ && cd appvideos \
+ && git clone https://github.com/felippedesouza/frontend-appvideos.git \
+ && git clone https://github.com/felippedesouza/backend-appvideos.git \
+ && git clone https://github.com/felippedesouza/backend-kafka.git
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Usando Docker Composer
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+O docker compose usa uma rede externa já criada, ao invés de ele criar, então é preciso criar uma rede. O mesmo serve pro volume do mysql.
 
-### `npm test`
+-  `docker create network --diver bridge appvideos`
+-  `docker volume create --name=v_mysql`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+**Espere terminar a criação dos containers de cada arquivo para executar os outros arquivos**
 
-### `npm run build`
+Ordem de execução:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+1. `docker-compose -f ./backend-appvideos/containers/kafka/docker-compose.yaml up -d`
+1. `docker-compose -f ./backend-appvideos/containers/elastic/docker-compose.yaml up -d`
+1. `docker-compose -f ./backend-appvideos/docker-compose.yaml up -d`
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+   1. `docker-compose exec backend-appvideos npx sequelize db:seed:all`
+   1. `docker-compose exec backend-appvideos npm start`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+1. `docker-compose -f ./backend-kafka/docker-compose.yaml up -d`
 
-### `npm run eject`
+1. `docker-compose -f ./fronted-appvideos/docker-compose.yaml up -d`
+   1. `docker-compose exec frontend-appvideos npm start`
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Usando Kubernetes
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- `kubectl apply -f ./backend-appvideos/k8s/1_mysql.yaml`
+- `kubectl apply -f ./backend-appvideos/k8s/2_redis.yaml`
+- `kubectl apply -f ./backend-appvideos/k8s/3_backend.yaml`
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- `kubectl apply -f ./frontned-appvideos/k8s/frontend.yaml`
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+## Comandos usados
 
-## Learn More
+### Docker Compose
+- `docker-compose -f compose-api.yaml up`
+- `docker-compose -f compose-api.yaml down`
+- `docker-compose -f compose-api.yaml logs -f backend-appvideos`
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+- `docker-compose -f compose-db.yaml up -d`
+- `docker-compose -f compose-db.yaml down`
+- `docker-compose -f compose-db.yaml logs -f mysql`
+- `docker-compose -f compose-db.yaml logs -f phpmyadmin`
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### Kubernetes
 
-### Code Splitting
+mysql e redis, espere o container ser criado pra depois cria o backend
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+- `kubectl port-forward svc/backend 3001:3001`
+- `kubectl port-forward svc/frontend 3000:3000`
 
-### Analyzing the Bundle Size
+- `kubectl apply -f configmap.yaml`
+- `kubectl apply -f app.yaml`
+- `kubectl get po (ou 'pods')`
+- `kubectl get svc (ou 'services')`
+- `kubectl logs <nome-pod>`
+- `kubectl port-forward svc/<nome> <host-port>:<service-port>`
+- `kubectl port-forward svc/<nome> 8000:80 (funciona pra loadbalancer ou padrao)`
+- `kubectl describe deployment appvideos`
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Explicando a rede no K8S
 
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+1. MySQL e Redis só serão usados dentro do cluster k8s, então o service é do tipo ClusterIP
+1. O frontend precisa ter acesso externo ao cluster, por isso seu tipo é LoadBalancer.
+1. O backend poderia ser do tipo ClusterIP, já que seu acesso seria so dentro do cluster, porem o frontend está sendo acessado fora do cluster (Browser) e quando haver uma requisição do tipo GET, ele precisa ter acesso ao cluster pra acessar o backend. Logo seu service é tipo LoadBalancer.
